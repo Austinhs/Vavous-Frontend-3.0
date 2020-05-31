@@ -1,32 +1,166 @@
 <template>
-  <div id="app">
-    <div id="nav">
-      <router-link to="/">Home</router-link> |
-      <router-link to="/about">About</router-link>
-    </div>
-    <router-view/>
-  </div>
+	<a-layout class="layout">
+		<a-layout-header class="header" v-if="logged_in">
+			<router-link to="/">
+				<img class="logo" src="./assets/logo.png" />
+			</router-link>
+
+			<a-menu mode="horizontal">
+				<router-link
+					tag="li"
+					class="ant-menu-item"
+					v-for="(route, index) in routes"
+					:key="index"
+					:to="route.path"
+					@click="control_nav_class"
+				>
+					<a-icon :type="route.icon" theme="twoTone" twoToneColor="#62c300" />
+					{{ route.name }}
+				</router-link>
+
+				<a-menu-item @click="logout">
+					<a-icon type="api" theme="twoTone" twoToneColor="#62c300" :key=" routes.length + 1" />Logout
+				</a-menu-item>
+			</a-menu>
+		</a-layout-header>
+
+		<a-layout-content class="content" v-if="logged_in">
+			<router-view class="page" :style="{ background: '#fff', padding: '24px', minHeight: '280px' }" />
+		</a-layout-content>
+
+		<div class="login-container" v-else>
+			<Login @logged_in="initJWT" :login_msg="login_msg" />
+		</div>
+
+		<a-layout-footer v-if="logged_in" class="footer">Vavous @2020</a-layout-footer>
+	</a-layout>
 </template>
 
-<style lang="less">
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-}
+<script>
+	import axios from "axios";
+	import Login from "./Login";
+	import jwt from "jsonwebtoken";
 
-#nav {
-  padding: 30px;
+	export default {
+		name: "App",
 
-  a {
-    font-weight: bold;
-    color: #2c3e50;
+		components: {
+			Login
+		},
 
-    &.router-link-exact-active {
-      color: #42b983;
-    }
-  }
-}
+		data() {
+			return {
+				logged_in: false,
+				login_msg: "",
+				active_el: null,
+				routes: []
+			};
+		},
+
+		created() {
+			this.initJWT();
+
+			this.routes = this.$router.options.routes;
+
+			axios.interceptors.response.use(
+				response => Promise.resolve(response),
+				error => {
+					if (error.response.status == 401) {
+						this.logged_in = false;
+						this.login_msg = "Your session has expired, please login.";
+					}
+
+					return Promise.reject(error);
+				}
+			);
+		},
+
+		methods: {
+			control_nav_class() {
+				this.active_el.classList.remove("add-menu-item-selected");
+				this.classList.add("ant-menu-item-selected");
+			},
+
+			logout() {
+				let confirm = window.confirm("Are you sure you want to logout?");
+
+				if (confirm) {
+					this.clearJWT();
+				}
+			},
+
+			clearJWT() {
+				localStorage.setItem("jwt", "");
+				this.logged_in = false;
+			},
+
+			initJWT(token = null) {
+				if (token == null) {
+					token = localStorage.getItem("jwt");
+				}
+
+				if (token) {
+					axios.defaults.headers.common["Authorization"] = "Bearer " + token;
+
+					if (token != null && token != "") {
+						token = jwt.decode(token, { json: true });
+						this.logged_in = Date.now() <= token.exp * 1000;
+					} else {
+						this.logged_in = false;
+					}
+				} else {
+					delete axios.defaults.headers.common["Authorization"];
+				}
+			}
+		}
+	};
+</script>
+
+<style scoped>
+	.layout {
+		min-height: 100%;
+	}
+
+	.footer {
+		font-weight: bolder;
+		text-align: center;
+	}
+
+	.ant-menu .router-link-exact-active {
+		color: black !important;
+		border-bottom: 2px solid black !important;
+	}
+
+	.ant-menu {
+		line-height: 63px;
+		border: none;
+	}
+
+	.header {
+		display: inherit;
+		background: white;
+		font-weight: bolder;
+		padding: 0 50px;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 15px;
+
+		/* Sticky Header */
+		position: fixed;
+		z-index: 1;
+		width: 100%;
+		box-shadow: 16px 0px 8px;
+	}
+
+	.content {
+		margin: 79px 15px 15px 15px;
+	}
+
+	.login-container {
+		background: none;
+	}
+
+	.logo {
+		height: 40px;
+	}
 </style>
