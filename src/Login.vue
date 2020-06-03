@@ -82,7 +82,6 @@
 					.then(response => {
 						let token = response.data.token;
 						this.cookieSet("jwt_token", token);
-						console.log("set", token);
 						this.$emit("logged_in", token);
 					})
 					.catch(err => {

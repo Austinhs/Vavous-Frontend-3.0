@@ -12,13 +12,12 @@
 					v-for="(route, index) in routes"
 					:key="index"
 					:to="route.path"
-					@click="control_nav_class"
 				>
 					<a-icon :type="route.icon" theme="twoTone" twoToneColor="#62c300" />
 					{{ route.name }}
 				</router-link>
 
-				<a-menu-item @click="logout">
+				<a-menu-item ref="logoutBtn" @click="logout">
 					<a-icon type="api" theme="twoTone" twoToneColor="#62c300" :key=" routes.length + 1" />Logout
 				</a-menu-item>
 			</a-menu>
@@ -56,7 +55,6 @@
 			return {
 				logged_in: false,
 				login_msg: "",
-				active_el: null,
 				routes: []
 			};
 		},
@@ -80,16 +78,17 @@
 		},
 
 		methods: {
-			control_nav_class() {
-				this.active_el.classList.remove("add-menu-item-selected");
-				this.classList.add("ant-menu-item-selected");
-			},
-
 			logout() {
 				let confirm = window.confirm("Are you sure you want to logout?");
 
 				if (confirm) {
 					this.clearJWT();
+				} else {
+					setTimeout(function() {
+						document
+							.querySelector(".ant-menu-item-selected")
+							.classList.remove("ant-menu-item-selected");
+					}, 50);
 				}
 			},
 
