@@ -2,7 +2,7 @@
 	<div class="login">
 		<img src="./assets/Design/Login/Green.png" class="design" />
 		<form ref="form" @submit="login" class="login-form">
-			<div class="welcome">Welcome to vavous</div>
+			<div class="welcome">Welcome to Vavous</div>
 			<div class="welcome-sub spacer">Please enter your login information to continue</div>
 
 			<a-input
@@ -144,6 +144,7 @@
 <style scoped>
 	.login {
 		display: flex;
+		flex-grow: 1;
 		background: #fefefe;
 	}
 
