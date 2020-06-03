@@ -3,7 +3,10 @@ import router from './router';
 import Antd from 'ant-design-vue';
 import 'ant-design-vue/dist/antd.less';
 import App from './App.vue';
+import VueCookie from 'vue-cookie';
 import axios from 'axios';
+
+Vue.use(VueCookie);
 
 axios.defaults.baseURL = 'http://api.vavous.com';
 axios.defaults.headers.common['Access-Control-Allow-Origin'] = '*';

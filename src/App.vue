@@ -25,14 +25,18 @@
 		</a-layout-header>
 
 		<a-layout-content class="content" v-if="logged_in">
-			<router-view class="page" :style="{ background: '#fff', padding: '24px', minHeight: '280px' }" />
+			<transition name="bounce" mode="out-in">
+				<router-view class="page" :style="{ background: '#fff', padding: '24px', minHeight: '280px' }" />
+			</transition>
 		</a-layout-content>
 
 		<div class="login-container" v-else>
 			<Login @logged_in="initJWT" :login_msg="login_msg" />
 		</div>
 
-		<a-layout-footer v-if="logged_in" class="footer">Vavous @2020</a-layout-footer>
+		<a-layout-footer v-if="logged_in" class="footer">
+			<a-icon type="copyright"></a-icon>Vavous @2020
+		</a-layout-footer>
 	</a-layout>
 </template>
 
@@ -90,13 +94,13 @@
 			},
 
 			clearJWT() {
-				localStorage.setItem("jwt", "");
+				this.$cookie.set("jwt_token", "");
 				this.logged_in = false;
 			},
 
 			initJWT(token = null) {
 				if (token == null) {
-					token = localStorage.getItem("jwt");
+					token = this.$cookie.get("jwt_token");
 				}
 
 				if (token) {
@@ -117,6 +121,28 @@
 </script>
 
 <style scoped>
+	@import url("https://fonts.googleapis.com/css?family=Montserrat");
+
+	.bounce-enter-active {
+		animation: bounce-in 0.5s;
+	}
+
+	.bounce-leave-active {
+		animation: bounce-in 0.5s reverse;
+	}
+
+	@keyframes bounce-in {
+		0% {
+			transform: scale(0);
+		}
+		50% {
+			transform: scale(1.1);
+		}
+		100% {
+			transform: scale(1);
+		}
+	}
+
 	.layout {
 		min-height: 100%;
 	}
@@ -124,6 +150,11 @@
 	.footer {
 		font-weight: bolder;
 		text-align: center;
+		letter-spacing: 2px;
+	}
+
+	.footer i {
+		padding-right: 10px;
 	}
 
 	.ant-menu .router-link-exact-active {
@@ -157,6 +188,9 @@
 	}
 
 	.login-container {
+		display: flex;
+		width: 100%;
+		flex-grow: 1;
 		background: none;
 	}
 
