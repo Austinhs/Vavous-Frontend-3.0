@@ -1,57 +1,78 @@
 <template>
-	<a-table
-		:data-source="data"
-		:columns="columns"
-		:loading="loading"
-		rowKey="id"
-		size="middle"
-		class="datatable"
-		:pagination="{ showQuickJumper: true }"
-	>
-		<div
-			slot="filterDropdown"
-			slot-scope="{ setSelectedKeys, selectedKeys, confirm, clearFilters, column }"
-			style="padding: 8px"
-		>
-			<a-input
-				v-ant-ref="c => (searchInput = c)"
-				:placeholder="`Search ${column.dataIndex}`"
-				:value="selectedKeys[0]"
-				style="width: 188px; margin-bottom: 8px; display: block;"
-				@change="e => setSelectedKeys(e.target.value ? [e.target.value] : [])"
-				@pressEnter="() => handleSearch(selectedKeys, confirm, column.dataIndex)"
-			/>
-			<a-button
-				type="primary"
-				icon="search"
-				size="small"
-				style="width: 90px; margin-right: 8px"
-				@click="() => handleSearch(selectedKeys, confirm, column.dataIndex)"
-			>Search</a-button>
-			<a-button size="small" style="width: 90px" @click="() => handleReset(clearFilters)">Reset</a-button>
+	<div class="datatable-container">
+		<div class="top-controls">
+			<a-button icon="plus-circle">Add</a-button>
 		</div>
 
-		<a-icon
-			slot="filterIcon"
-			slot-scope="filtered"
-			type="search"
-			:style="{ color: filtered ? '#108ee9' : undefined}"
-		/>
+		<a-table
+			:data-source="data"
+			:columns="columns"
+			:loading="loading"
+			rowKey="id"
+			size="middle"
+			class="datatable"
+			:pagination="{ showQuickJumper: true }"
+		>
+			<template slot="controls" slot-scope="text, record">
+				<a-popconfirm v-if="can_delete" title="Are you sure?" @confirm="() => onDelete(record.id)">
+					<a-icon
+						class="control_icon"
+						style="margin-right: 10px;"
+						type="delete"
+						theme="twoTone"
+						two-tone-color="crimson"
+					/>
+				</a-popconfirm>
 
-		<template slot="customRender" slot-scope="text, record, index, column">
-			<span v-if="searchText && searchedColumn === column.dataIndex">
-				<template v-for="(fragment, i) in text">
-					<mark
-						v-if="fragment.toLowerCase() === searchText.toLowerCase()"
-						:key="i"
-						class="highlight"
-					>{{ fragment }}</mark>
-					<template v-else>{{ fragment }}</template>
-				</template>
-			</span>
-			<template v-else>{{ text }}</template>
-		</template>
-	</a-table>
+				<a-icon v-if="can_edit" class="control_icon" type="edit" />
+				<a-icon v-if="view != ''" class="control_icon" type="eye" style="color: green" />
+			</template>
+
+			<div
+				slot="filterDropdown"
+				slot-scope="{ setSelectedKeys, selectedKeys, confirm, clearFilters, column }"
+				style="padding: 8px"
+			>
+				<a-input
+					v-ant-ref="c => (searchInput = c)"
+					:placeholder="`Search ${column.dataIndex}`"
+					:value="selectedKeys[0]"
+					style="width: 188px; margin-bottom: 8px; display: block;"
+					@change="e => setSelectedKeys(e.target.value ? [e.target.value] : [])"
+					@pressEnter="() => handleSearch(selectedKeys, confirm, column.dataIndex)"
+				/>
+				<a-button
+					type="primary"
+					icon="search"
+					size="small"
+					style="width: 90px; margin-right: 8px"
+					@click="() => handleSearch(selectedKeys, confirm, column.dataIndex)"
+				>Search</a-button>
+				<a-button size="small" style="width: 90px" @click="() => handleReset(clearFilters)">Reset</a-button>
+			</div>
+
+			<a-icon
+				slot="filterIcon"
+				slot-scope="filtered"
+				type="search"
+				:style="{ color: filtered ? '#108ee9' : undefined}"
+			/>
+
+			<template slot="customRender" slot-scope="text, record, index, column">
+				<span v-if="searchText && searchedColumn === column.dataIndex">
+					<template v-for="(fragment, i) in text">
+						<mark
+							v-if="fragment.toLowerCase() === searchText.toLowerCase()"
+							:key="i"
+							class="highlight"
+						>{{ fragment }}</mark>
+						<template v-else>{{ fragment }}</template>
+					</template>
+				</span>
+				<template v-else>{{ text }}</template>
+			</template>
+		</a-table>
+	</div>
 </template>
 
 <script>
@@ -93,6 +114,18 @@
 				default: true
 			},
 
+			can_delete: {
+				default: true
+			},
+
+			can_edit: {
+				default: true
+			},
+
+			view: {
+				default: ""
+			},
+
 			/**
 			 * Example: [
 			 *  { column: 'wesbite', value: 'harvey.net },
@@ -107,105 +140,128 @@
 		},
 
 		created() {
-			for (let column of this.columns) {
-				if (
-					typeof column.dataIndex === "undefined" ||
-					column.dataIndex === null
-				) {
-					window.alert("All columns must have a defined dataIndex");
-				}
-
-				// Setup default functionality like sorting/searching
-				if (this.searchColumn) {
-					if (typeof column.scopedSlots === "undefined") {
-						column.scopedSlots = {};
-					}
-
-					column.scopedSlots.filterDropdown = "filterDropdown";
-					column.scopedSlots.filterIcon = "filterIcon";
-				}
-
-				if (typeof column.key == "undefined") {
-					column.key = column.dataIndex;
-				}
-
-				if (typeof column.sorter == "undefined") {
-					column.sorter = (a, b) => {
-						let col_a = a;
-						let col_b = b;
-
-						try {
-							col_a = eval(`a.${column.dataIndex}`);
-							col_b = eval(`b.${column.dataIndex}`);
-						} catch (e) {
-							return 0;
-						}
-
-						if (col_a < col_b) {
-							return -1;
-						}
-
-						if (col_a > col_b) {
-							return 1;
-						}
-
-						return 0;
-					};
-				}
-
-				if (typeof column.filterMultiple == "undefined") {
-					column.filterMultiple = true;
-				}
-
-				if (typeof column.ellipsis == "undefined") {
-					column.ellipsis = true;
-				}
-
-				if (typeof column.onFilter == "undefined") {
-					column.onFilter = (value, record) => {
-						record;
-						let eval_str = `record.${this.searchedColumn}`;
-
-						try {
-							let obj = eval(eval_str);
-							return obj
-								.toString()
-								.toLowerCase()
-								.includes(value.toLowerCase());
-						} catch (e) {
-							console.info("Failed to find any realted data: " + eval_str);
-						}
-					};
-				}
-
-				if (typeof column.onFilterDropdownVisibleChange == "undefined") {
-					column.onFilterDropdownVisibleChange = visible => {
-						if (visible) {
-							setTimeout(() => {
-								this.searchInput.focus();
-							}, 0);
-						}
-					};
-				}
-
-				let keys = column.dataIndex.split(".");
-
-				if (keys.length > 1) {
-					// Remove target
-					keys.pop();
-
-					for (let key of keys) {
-						if (!this.expand.includes(key)) {
-							this.expand.push(key);
-						}
-					}
-				}
-			}
-
+			this.tableSetup();
 			this.getModelData();
 		},
 
 		methods: {
+			onDelete(id) {
+				const data = [...this.data];
+				this.data = data.filter(item => item.id !== id);
+			},
+
+			tableSetup() {
+				let has_controls = false;
+
+				for (let column of this.columns) {
+					if (column.keys === "datatable_controls") {
+						has_controls = true;
+						continue;
+					}
+
+					if (
+						typeof column.dataIndex === "undefined" ||
+						column.dataIndex === null
+					) {
+						window.alert("All columns must have a defined dataIndex");
+					}
+
+					// Setup default functionality like sorting/searching
+					if (this.searchColumn) {
+						if (typeof column.scopedSlots === "undefined") {
+							column.scopedSlots = {};
+						}
+
+						column.scopedSlots.filterDropdown = "filterDropdown";
+						column.scopedSlots.filterIcon = "filterIcon";
+					}
+
+					if (typeof column.key == "undefined") {
+						column.key = column.dataIndex;
+					}
+
+					if (typeof column.sorter == "undefined") {
+						column.sorter = (a, b) => {
+							let col_a = a;
+							let col_b = b;
+
+							try {
+								col_a = eval(`a.${column.dataIndex}`);
+								col_b = eval(`b.${column.dataIndex}`);
+							} catch (e) {
+								return 0;
+							}
+
+							if (col_a < col_b) {
+								return -1;
+							}
+
+							if (col_a > col_b) {
+								return 1;
+							}
+
+							return 0;
+						};
+					}
+
+					if (typeof column.filterMultiple == "undefined") {
+						column.filterMultiple = true;
+					}
+
+					if (typeof column.ellipsis == "undefined") {
+						column.ellipsis = true;
+					}
+
+					if (typeof column.onFilter == "undefined") {
+						column.onFilter = (value, record) => {
+							record;
+							let eval_str = `record.${this.searchedColumn}`;
+
+							try {
+								let obj = eval(eval_str);
+								return obj
+									.toString()
+									.toLowerCase()
+									.includes(value.toLowerCase());
+							} catch (e) {
+								console.info("Failed to find any realted data: " + eval_str);
+							}
+						};
+					}
+
+					if (typeof column.onFilterDropdownVisibleChange == "undefined") {
+						column.onFilterDropdownVisibleChange = visible => {
+							if (visible) {
+								setTimeout(() => {
+									this.searchInput.focus();
+								}, 0);
+							}
+						};
+					}
+
+					let keys = column.dataIndex.split(".");
+
+					if (keys.length > 1) {
+						// Remove target
+						keys.pop();
+
+						for (let key of keys) {
+							if (!this.expand.includes(key)) {
+								this.expand.push(key);
+							}
+						}
+					}
+				}
+
+				if (!has_controls) {
+					this.columns.unshift({
+						title: "Controls",
+						keys: "datatable_controls",
+						scopedSlots: { customRender: "controls" }
+					});
+				}
+			},
+
 			handleSearch(selectedKeys, confirm, dataIndex) {
 				confirm();
 				this.searchText = selectedKeys[0];
@@ -519,5 +575,14 @@
 		> tr
 		> td {
 		min-width: 50px;
+	}
+
+	.control_icon {
+		margin-left: 10px;
+		cursor: pointer;
+	}
+
+	.top-controls {
+		margin: 10px;
 	}
 </style>

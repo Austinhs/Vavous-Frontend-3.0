@@ -1,6 +1,6 @@
 <template>
 	<div class="pipeline">
-		<DataTable model="person" :columns="headers" />
+		<DataTable model="person" view="something" :columns="headers" />
 	</div>
 </template>
 
