@@ -1,7 +1,7 @@
 <template>
 	<div class="datatable-container">
 		<div class="top-controls">
-			<a-button icon="plus-circle">Add</a-button>
+			<a-button icon="plus-circle" @click="onAdd" type="primary">Add</a-button>
 		</div>
 
 		<a-table
@@ -11,10 +11,58 @@
 			rowKey="id"
 			size="middle"
 			class="datatable"
+			bordered
 			:pagination="{ showQuickJumper: true }"
 		>
+			<template v-for="col in columns" :slot="col.dataIndex" slot-scope="text, record">
+				<div :key="col.dataIndex">
+					<template v-if="record.editable">
+						<a-select
+							v-if="col.options"
+							:defaultValue="options[col.options.model][text]"
+							show-search
+							:placeholder="`Select a ${col.options.model}`"
+							:record_id="record.id"
+							option-filter-prop="children"
+							style="width: 100%"
+							:filter-option="filterOption"
+							:dropdownMatchSelectWidth="false"
+							@change="value => handleEditOptionChange(value, record, col)"
+						>
+							<a-select-option
+								v-for="(option, i) in options[col.options.model]"
+								:key="i"
+								style="min-width: 120px"
+								:value="i"
+							>{{ option }}</a-select-option>
+						</a-select>
+
+						<a-input
+							v-else
+							style="margin: -5px 0"
+							:value="text"
+							@change="e => handleEditChange(e.target.value, record, col.dataIndex)"
+						/>
+					</template>
+
+					<template v-else>
+						<template v-if="col.options">{{ options[col.options.model][text] }}</template>
+						<template v-else>{{ text }}</template>
+					</template>
+				</div>
+			</template>
+
+			<!-- Controllers (save,delete,view,edit) -->
 			<template slot="controls" slot-scope="text, record">
-				<a-popconfirm v-if="can_delete" title="Are you sure?" @confirm="() => onDelete(record.id)">
+				<a-popconfirm
+					v-if="can_delete"
+					title="Are you sure?"
+					@confirm="() => onDelete(record) "
+					ok-text="Delete"
+					ok-type="danger"
+				>
+					<a-icon slot="icon" type="delete" theme="twoTone" two-tone-color="crimson" />
+
 					<a-icon
 						class="control_icon"
 						style="margin-right: 10px;"
@@ -24,10 +72,29 @@
 					/>
 				</a-popconfirm>
 
-				<a-icon v-if="can_edit" class="control_icon" type="edit" />
-				<a-icon v-if="view != ''" class="control_icon" type="eye" style="color: green" />
+				<a-icon
+					v-if="canSave(record)"
+					class="control_icon"
+					type="save"
+					@click="() => onSave(record)"
+					style="color: green"
+				/>
+
+				<a-popconfirm
+					v-if="canSave(record) && !record.datatable_add"
+					@confirm="() => cancelSave(record)"
+					title="Are you sure? This will revert edited data"
+				>
+					<a-icon class="control_icon" type="close-circle" />
+				</a-popconfirm>
+
+				<span v-else-if="!record.datatable_add">
+					<a-icon v-if="can_edit" class="control_icon" type="edit" @click="() => onEdit(record)" />
+					<a-icon v-if="view != ''" class="control_icon" type="eye" style="color: green" />
+				</span>
 			</template>
 
+			<!-- The dropdown shown when you click the search icon -->
 			<div
 				slot="filterDropdown"
 				slot-scope="{ setSelectedKeys, selectedKeys, confirm, clearFilters, column }"
@@ -51,26 +118,13 @@
 				<a-button size="small" style="width: 90px" @click="() => handleReset(clearFilters)">Reset</a-button>
 			</div>
 
+			<!-- The search icon are we using -->
 			<a-icon
 				slot="filterIcon"
 				slot-scope="filtered"
 				type="search"
-				:style="{ color: filtered ? '#108ee9' : undefined}"
+				:style="{ color: filtered ? 'white' : undefined, background: filtered ? '#62c300' : undefined }"
 			/>
-
-			<template slot="customRender" slot-scope="text, record, index, column">
-				<span v-if="searchText && searchedColumn === column.dataIndex">
-					<template v-for="(fragment, i) in text">
-						<mark
-							v-if="fragment.toLowerCase() === searchText.toLowerCase()"
-							:key="i"
-							class="highlight"
-						>{{ fragment }}</mark>
-						<template v-else>{{ fragment }}</template>
-					</template>
-				</span>
-				<template v-else>{{ text }}</template>
-			</template>
 		</a-table>
 	</div>
 </template>
@@ -82,14 +136,25 @@
 		name: "DataTable",
 		data() {
 			return {
+				// Table
 				data: [],
 				loading: false,
 				expand: [],
+				options: {},
 
 				// Search
 				searchText: "",
 				searchInput: null,
-				searchedColumn: ""
+				searchedColumn: "",
+
+				// Add
+				add_counter: 0,
+
+				// Edit
+				editCacheData: {},
+
+				// Save
+				post_url: `/v1/crud`
 			};
 		},
 
@@ -139,22 +204,197 @@
 			}
 		},
 
-		created() {
-			this.tableSetup();
-			this.getModelData();
+		async created() {
+			this.loading = true;
+
+			await this.tableSetup();
+			await this.getModelData();
+
+			this.loading = false;
 		},
 
 		methods: {
-			onDelete(id) {
-				const data = [...this.data];
-				this.data = data.filter(item => item.id !== id);
+			handleEditChange(value, key, column) {
+				const newData = [...this.data];
+				let target = newData.filter(item => key.id === item.id)[0];
+
+				if (target) {
+					target = this.assignValueByString(target, column, value);
+					this.data = newData;
+				}
 			},
 
-			tableSetup() {
+			handleEditOptionChange(value, record, col) {
+				const newData = [...this.data];
+				let target = newData.filter(item => record.id === item.id)[0];
+
+				if (target) {
+					target = this.assignValueByString(target, col.dataIndex, value);
+					this.data = newData;
+				}
+			},
+
+			onDelete(record) {
+				const data = [...this.data];
+				this.data = data.filter(item => item.id !== record.id);
+
+				if (!record.datatable_add) {
+					axios.delete(`/v1/crud/${this.model}/${record.id}`);
+				}
+			},
+
+			onEdit(record) {
+				const data = [...this.data];
+				const target = data.filter(item => item.id === record.id)[0];
+
+				if (target) {
+					target.editable = true;
+
+					this.editCacheData[record.id] = Object.assign({}, target);
+					this.data = data;
+				}
+			},
+
+			onAdd() {
+				const add_key = `datatable_add_${this.add_counter}`;
+
+				this.add_counter++;
+
+				let template = {
+					key: add_key,
+					id: add_key,
+					datatable_add: true,
+					editable: true
+				};
+
+				this.editingKey = add_key;
+
+				for (const index in this.columns) {
+					const column = this.columns[index];
+					const column_key = column.key;
+
+					if (column_key == "datatable_controls") {
+						continue;
+					}
+
+					const split = column_key.split(".");
+					const last_key = split.pop();
+
+					let ref = template;
+
+					for (const key of split) {
+						if (!ref[key] || !(ref[key] instanceof Object)) {
+							ref[key] = {};
+						}
+
+						ref = ref[key];
+					}
+
+					ref[last_key] = null;
+				}
+
+				this.data.unshift(template);
+			},
+
+			async onSave(record) {
+				this.loading = true;
+
+				const data = [...this.data];
+				const target = data.filter(item => item.id === record.id)[0];
+				const post = {};
+				post[this.model] = Object.assign({}, target);
+
+				// Remove fields not used in CRUD
+				if (post[this.model].id.toString().includes("datatable_add")) {
+					delete post[this.model].id;
+					delete post[this.model].datatable_add;
+					delete target.datatable_add;
+				}
+
+				delete post[this.model].editable;
+				delete post[this.model].key;
+
+				await axios
+					.post(this.post_url, post)
+					.then(response => {
+						target.id = response.data[this.model].id;
+						target.key = response.data[this.model].id;
+					})
+					.catch(error => {
+						console.error(error);
+						window.alert(error.message);
+					})
+					.finally(() => {
+						delete target.editable;
+						this.loading = false;
+					});
+			},
+
+			canSave(record) {
+				return record.datatable_add == true || record.editable;
+			},
+
+			cancelSave(record) {
+				if (typeof record.datatable_add != "undefined") {
+					return this.onDelete(record);
+				}
+
+				const newData = [...this.data];
+				const target = newData.filter(item => record.id === item.id)[0];
+
+				if (target) {
+					Object.assign(target, this.editCacheData[record.id]);
+
+					delete target.editable;
+					this.data = newData;
+				}
+			},
+
+			getValueByString(target, string) {
+				target = target && target instanceof Object ? target : {};
+
+				const keys = string.split(".");
+				const last_key = keys.pop();
+
+				let ref = target;
+
+				for (const key of keys) {
+					if (!ref[key] || !(ref[key] instanceof Object)) {
+						ref[key] = {};
+					}
+
+					ref = ref[key];
+				}
+
+				return ref[last_key];
+			},
+
+			assignValueByString(target, string, value) {
+				target = target && target instanceof Object ? target : {};
+
+				const keys = string.split(".");
+				const last_key = keys.pop();
+
+				let ref = target;
+
+				for (const key of keys) {
+					if (!ref[key] || !(ref[key] instanceof Object)) {
+						ref[key] = {};
+					}
+
+					ref = ref[key];
+				}
+
+				ref[last_key] = value;
+
+				return target;
+			},
+
+			async tableSetup() {
 				let has_controls = false;
 
 				for (let column of this.columns) {
-					if (column.keys === "datatable_controls") {
+					if (column.key === "datatable_controls") {
 						has_controls = true;
 						continue;
 					}
@@ -166,12 +406,20 @@
 						window.alert("All columns must have a defined dataIndex");
 					}
 
+					if (typeof column.options !== "undefined") {
+						await this.setupTableOptions(column.options);
+					}
+
+					if (typeof column.scopedSlots === "undefined") {
+						column.scopedSlots = {};
+					}
+
+					if (typeof column.scopedSlots.customRender === "undefined") {
+						column.scopedSlots.customRender = column.dataIndex;
+					}
+
 					// Setup default functionality like sorting/searching
 					if (this.searchColumn) {
-						if (typeof column.scopedSlots === "undefined") {
-							column.scopedSlots = {};
-						}
-
 						column.scopedSlots.filterDropdown = "filterDropdown";
 						column.scopedSlots.filterIcon = "filterIcon";
 					}
@@ -182,14 +430,11 @@
 
 					if (typeof column.sorter == "undefined") {
 						column.sorter = (a, b) => {
-							let col_a = a;
-							let col_b = b;
+							let col_a = this.getValueByString(a, column.dataIndex);
+							let col_b = this.getValueByString(b, column.dataIndex);
 
-							try {
-								col_a = eval(`a.${column.dataIndex}`);
-								col_b = eval(`b.${column.dataIndex}`);
-							} catch (e) {
-								return 0;
+							if (typeof col_a === "undefined") {
+								return -1;
 							}
 
 							if (col_a < col_b) {
@@ -214,17 +459,28 @@
 
 					if (typeof column.onFilter == "undefined") {
 						column.onFilter = (value, record) => {
-							record;
-							let eval_str = `record.${this.searchedColumn}`;
+							if (!this.searchedColumn) {
+								return;
+							}
+
+							if (record.datatable_add || record.editable) {
+								return true;
+							}
 
 							try {
-								let obj = eval(eval_str);
-								return obj
-									.toString()
-									.toLowerCase()
-									.includes(value.toLowerCase());
+								let obj = this.getValueByString(record, this.searchedColumn);
+
+								return (
+									obj.toLowerCase().includes(value.toLowerCase()) ||
+									obj === null ||
+									obj === "" ||
+									obj === value
+								);
 							} catch (e) {
-								console.info("Failed to find any realted data: " + eval_str);
+								console.info(
+									`Failed to find any realted data: record.${this.searchedColumn}`
+								);
+								console.error(e);
 							}
 						};
 					}
@@ -233,7 +489,9 @@
 						column.onFilterDropdownVisibleChange = visible => {
 							if (visible) {
 								setTimeout(() => {
-									this.searchInput.focus();
+									if (this.searchInput !== null) {
+										this.searchInput.focus();
+									}
 								}, 0);
 							}
 						};
@@ -256,16 +514,47 @@
 				if (!has_controls) {
 					this.columns.unshift({
 						title: "Controls",
-						keys: "datatable_controls",
+						key: "datatable_controls",
+						width: 100,
+						dataIndex: "datatable_controls",
 						scopedSlots: { customRender: "controls" }
 					});
 				}
 			},
 
+			async setupTableOptions(option_def) {
+				if (!this.options[option_def.model]) {
+					this.options[option_def.model] = {};
+					const options = this.options[option_def.model];
+
+					await axios
+						.get(`/v1/crud/${option_def.model}`)
+						.then(response => {
+							for (const option of response.data.results) {
+								options[option.id] = option[option_def.column];
+							}
+						})
+						.catch(err => {
+							console.error(err);
+							window.alert(
+								`Failed to load options for model: ${option_def.model}, index: ${option_def.column}`
+							);
+						});
+				}
+			},
+
+			filterOption(input, option) {
+				return (
+					option.componentOptions.children[0].text
+						.toLowerCase()
+						.indexOf(input.toLowerCase()) >= 0
+				);
+			},
+
 			handleSearch(selectedKeys, confirm, dataIndex) {
+				this.searchedColumn = dataIndex;
 				confirm();
 				this.searchText = selectedKeys[0];
-				this.searchedColumn = dataIndex;
 			},
 
 			handleReset(clearFilters) {
@@ -274,8 +563,6 @@
 			},
 
 			getModelData() {
-				this.loading = true;
-
 				let query_params = [];
 
 				if (this.expand.length > 0) {
@@ -302,128 +589,7 @@
 					.catch(err => {
 						console.error(err);
 						window.alert("Failed to load table for model: " + this.model);
-					})
-					.finally(() => {
-						this.loading = false;
 					});
-			},
-
-			remove_item(item) {
-				const index = this.items.indexOf(item);
-
-				if (confirm("Are you sure you want to delete this item?")) {
-					axios.delete(`/v1/crud/${this.model}/${item.id}`);
-
-					console.log(item);
-
-					this.items.splice(index, 1);
-				}
-			},
-
-			edit_dialog(item) {
-				let edit_model = {};
-
-				this.source_headers.forEach(header => {
-					if (!header.disabled) {
-						let keys = header.value.split(".");
-
-						if (keys.length > 1) {
-							let lookup_value = Object.assign({}, item);
-							keys.forEach(index => {
-								if (lookup_value[index]) {
-									lookup_value = lookup_value[index];
-								}
-							});
-
-							edit_model[header.value] = lookup_value;
-						} else {
-							edit_model[header.value] = item[header.value];
-						}
-					}
-				});
-
-				edit_model.id = item.id;
-
-				/**
-				 * Get the id's for expanded fields (You wont get the id's off the headers of the table)
-				 * @TODO Add onto this functionality to go more than 1 level deep
-				 */
-				if (this.expand) {
-					this.expand.forEach(key => {
-						edit_model[`${key}.id`] = item[key].id;
-					});
-				}
-
-				this.index = this.items.indexOf(item);
-				this.edit_model = edit_model;
-				this.dialog = true;
-			},
-
-			close_dialog() {
-				this.dialog = false;
-				this.$nextTick(() => {
-					this.edit_model = Object.assign({}, this.default_model);
-					this.index = -1;
-				});
-			},
-
-			assignEditValues(target, ...value_maps) {
-				target = target && target instanceof Object ? target : {};
-
-				for (const map of value_maps) {
-					for (let field in map) {
-						const keys = field.split(".");
-						const last_key = keys.pop();
-
-						let ref = target;
-
-						for (const key of keys) {
-							if (!ref[key] || !(ref[key] instanceof Object)) {
-								ref[key] = {};
-							}
-
-							ref = ref[key];
-						}
-
-						ref[last_key] = map[field];
-					}
-				}
-
-				return target;
-			},
-
-			async save() {
-				let post = {};
-				let post_url = `/v1/crud`;
-				let crud = this.assignEditValues({}, this.edit_model);
-
-				post[this.model] = crud;
-
-				if (this.index > -1) {
-					await axios
-						.post(post_url, post)
-						.then(() => {
-							Object.assign(this.items[this.index], crud);
-						})
-						.catch(error => {
-							console.error(error);
-							window.alert(error.message);
-						});
-				} else {
-					await axios
-						.post(post_url, post)
-						.then(response => {
-							crud.id = response.data[this.model].id;
-
-							this.items.push(crud);
-						})
-						.catch(error => {
-							console.error(error);
-							window.alert(error.message);
-						});
-				}
-
-				this.close_dialog();
 			}
 		}
 	};
@@ -577,8 +743,11 @@
 		min-width: 50px;
 	}
 
-	.control_icon {
+	.control_icon:not(.anticon-delete) {
 		margin-left: 10px;
+	}
+
+	.control_icon {
 		cursor: pointer;
 	}
 
