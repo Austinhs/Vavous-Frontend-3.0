@@ -36,6 +36,10 @@
 				<a-checkbox v-model="remember">Remember me</a-checkbox>
 				<a>Forgot Password?</a>
 			</div>
+			
+			<div class="warning-message" :style="login_error ? '' : 'display: none'">
+				{{login_error}}
+			</div>
 
 			<a-button type="primary" size="large" :loading="loading" @click="login">Login</a-button>
 		</form>
@@ -148,9 +152,18 @@
 		background: #fefefe;
 	}
 
+	.ant-table-header-column::after {
+		margin-right: 10px !important;
+	}
+
 	.design {
 		max-height: 100vh;
 		max-width: 60vw;
+	}
+
+	.warning-message {
+		color: crimson;
+		text-align: center;
 	}
 
 	.login-form {

@@ -1,14 +1,13 @@
 <template>
-	<v-list-item>
-		<v-list-item-content @click="toggle">
-			<v-list-item-title>{{ title }}</v-list-item-title>
-			<v-list-item-subtitle>{{ description }}</v-list-item-subtitle>
-		</v-list-item-content>
-
-		<v-list-item-action>
-			<v-switch v-model="switch_value" :loading="switch_loading" color="primary"></v-switch>
-		</v-list-item-action>
-	</v-list-item>
+	<div class="switch-setting-item">
+		<div class="info">
+			<div class="title">{{ title }}</div>
+			<div class="description">{{ description }}</div>
+		</div>
+		<div class="value">
+			<a-switch :checked="switch_value" :loading="switch_loading" @click="toggle"/>
+		</div>
+	</div>
 </template>
 
 <script>
@@ -94,3 +93,30 @@
 		}
 	};
 </script>
+
+<style lang="less" scoped>
+.switch-setting-item {
+	display: flex;
+	align-items: center;
+	margin: 10px;
+	padding: 10px;
+	border-radius: 5px;
+	background: #f0f2f5;
+	border: 1px solid darkseagreen;
+
+	.info {
+		flex-grow: 1;
+		padding: 15px;
+
+		.title {
+			font-weight: bolder;
+			font-size: 1.3em;
+		}
+
+		.description {
+			opacity: .75;
+		}
+	}
+}
+
+</style>

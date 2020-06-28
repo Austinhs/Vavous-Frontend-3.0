@@ -62,7 +62,11 @@
 		created() {
 			this.initJWT();
 
-			this.routes = this.$router.options.routes;
+			this.routes = this.$router.options.routes.filter(route => {
+				if(route.main_page) {
+					return route;
+				}
+			});
 
 			axios.interceptors.response.use(
 				response => Promise.resolve(response),

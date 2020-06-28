@@ -16,7 +16,7 @@
 		>
 			<template v-for="col in columns" :slot="col.dataIndex" slot-scope="text, record">
 				<div :key="col.dataIndex">
-					<template v-if="record.editable">
+					<template v-if="record.editable && (typeof col.write === 'undefined' || col.write)">
 						<a-select
 							v-if="col.options"
 							:defaultValue="options[col.options.model][text]"
@@ -33,9 +33,16 @@
 								v-for="(option, i) in options[col.options.model]"
 								:key="i"
 								style="min-width: 120px"
-								:value="i"
+								:value="i"	
 							>{{ option }}</a-select-option>
 						</a-select>
+
+						<a-date-picker 
+							v-else-if="(col.format == 'date')" 
+							:defaultValue="formatDisplay(text, 'date')" 
+							format="MM/DD/YYYY"
+							@change="(date, dateString) => handleEditChange(dateString, record, col.dataIndex)"
+						/>
 
 						<a-input
 							v-else
@@ -46,7 +53,11 @@
 					</template>
 
 					<template v-else>
+						<template v-if="typeof col.default !== 'undefined' && (text === '' || text === null)">
+							{{ setDefault(col, record) }}
+						</template>
 						<template v-if="col.options">{{ options[col.options.model][text] }}</template>
+						<template v-else-if="col.format">{{ formatDisplay(text, col.format) }} </template>
 						<template v-else>{{ text }}</template>
 					</template>
 				</div>
@@ -90,7 +101,7 @@
 
 				<span v-else-if="!record.datatable_add">
 					<a-icon v-if="can_edit" class="control_icon" type="edit" @click="() => onEdit(record)" />
-					<a-icon v-if="view != ''" class="control_icon" type="eye" style="color: green" />
+					<a-icon v-if="view != ''" class="control_icon" type="eye" style="color: green" @click="() => onView(record)" />
 				</span>
 			</template>
 
@@ -131,6 +142,7 @@
 
 <script>
 	import axios from "axios";
+	import moment from "moment";
 
 	export default {
 		name: "DataTable",
@@ -141,6 +153,7 @@
 				loading: false,
 				expand: [],
 				options: {},
+				required_columns: [],
 
 				// Search
 				searchText: "",
@@ -162,6 +175,14 @@
 			// Backend model
 			model: {
 				required: true
+			},
+
+			parent_column: {
+				required: false
+			},
+
+			parent_id: {
+				required: false
 			},
 
 			model_txt: {
@@ -214,6 +235,51 @@
 		},
 
 		methods: {
+			setDefault(column, record) {
+				if(typeof column.default === "undefined") {
+					return;
+				}
+
+				const newData = [...this.data];
+				let target = newData.filter(item => record.id === item.id)[0];
+
+				if (target) {
+					target = this.assignValueByString(target, column.dataIndex, column.default);
+					this.data = newData;
+				}
+				
+				return column.default;
+			},
+
+			formatDisplay(value, format) {
+				let display = value;
+				
+				if(format === "money") {
+					const formatter = new Intl.NumberFormat('en-US', {
+						style: 'currency',
+						currency: 'USD',
+					});
+
+					display = formatter.format(value);
+				}
+
+				if(format === "date") {
+					const date = moment(value);
+
+					if(date.isValid()) {
+						display = date.format('MM/DD/YYYY');
+					} else {
+						display = null;
+					}
+				}
+
+				if(typeof format === "function") {
+					display = format(value);
+				}
+
+				return display;
+			},
+
 			handleEditChange(value, key, column) {
 				const newData = [...this.data];
 				let target = newData.filter(item => key.id === item.id)[0];
@@ -241,6 +307,10 @@
 				if (!record.datatable_add) {
 					axios.delete(`/v1/crud/${this.model}/${record.id}`);
 				}
+			},
+
+			onView(record) {
+				this.$router.push(`${this.view}/${record.id}`);
 			},
 
 			onEdit(record) {
@@ -299,6 +369,21 @@
 			async onSave(record) {
 				this.loading = true;
 
+				const required_errors = [];
+				for(const column of this.required_columns) {
+					const column_value = this.getValueByString(record, column.dataIndex);
+					
+					if(column_value == null || column_value.trim() == "") {
+						required_errors.push(`"${column.title}" is a required field`);
+					}
+				}
+
+				if(required_errors.length) {
+					window.alert(required_errors.join('\n') + '\n\n Due to these errors, the row was not saved.');
+					this.loading = false;
+					return;
+				}
+
 				const data = [...this.data];
 				const target = data.filter(item => item.id === record.id)[0];
 				const post = {};
@@ -313,6 +398,10 @@
 
 				delete post[this.model].editable;
 				delete post[this.model].key;
+
+				if(typeof this.parent_column !== "undefined" && typeof this.parent_id !== "undefined") {
+					post[this.model] = this.assignValueByString(post[this.model], this.parent_column, this.parent_id);
+				}
 
 				await axios
 					.post(this.post_url, post)
@@ -406,6 +495,10 @@
 						window.alert("All columns must have a defined dataIndex");
 					}
 
+					if(typeof column.required !== "undefined" && column.required) {
+						this.required_columns.push(column);
+					}
+
 					if (typeof column.options !== "undefined") {
 						await this.setupTableOptions(column.options);
 					}
@@ -433,7 +526,13 @@
 							let col_a = this.getValueByString(a, column.dataIndex);
 							let col_b = this.getValueByString(b, column.dataIndex);
 
-							if (typeof col_a === "undefined") {
+							console.log(column);
+
+							if (typeof col_b === "undefined" || col_b == null || col_b == "") {
+								return -1;
+							}
+
+							if(typeof col_a === "undefined" || col_a == null || col_a == "") {
 								return -1;
 							}
 
@@ -464,7 +563,7 @@
 							}
 
 							if (record.datatable_add || record.editable) {
-								return true;
+								return false;
 							}
 
 							try {
@@ -527,17 +626,38 @@
 					this.options[option_def.model] = {};
 					const options = this.options[option_def.model];
 
+					if(!Array.isArray(option_def.column)) {
+						option_def.column = [option_def.column];
+					}
+
+					let option_join = ' ';
+
+					if(typeof option_def.column_join !== "undefined") {
+						option_join = option_def.column_join;
+					}
+
 					await axios
 						.get(`/v1/crud/${option_def.model}`)
 						.then(response => {
 							for (const option of response.data.results) {
-								options[option.id] = option[option_def.column];
+								let option_text = [];
+								for (const column of option_def.column) {
+									option_text.push(option[column]);
+								}
+
+								options[option.id] = option_text.join(option_join);
 							}
 						})
 						.catch(err => {
+							let indexes = [];
+							for (const column of option_def.column) {
+								indexes.push(column);
+							}
+
 							console.error(err);
+
 							window.alert(
-								`Failed to load options for model: ${option_def.model}, index: ${option_def.column}`
+								`Failed to load options for model: ${option_def.model} \n index(s): ${indexes.join(',')}`
 							);
 						});
 				}
@@ -567,6 +687,14 @@
 
 				if (this.expand.length > 0) {
 					query_params.push("expand=" + this.expand.join(","));
+				}
+
+				// If we are using a parent table, we should only load the children for that parent in this model
+				if (typeof this.parent_column !== "undefined" && typeof this.parent_id !== "undefined") {
+					this.where.push({
+						column: this.parent_column,
+						value: this.parent_id
+					});
 				}
 
 				if (this.where.length > 0) {

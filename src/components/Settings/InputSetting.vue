@@ -1,14 +1,13 @@
 <template>
-	<v-list-item :ripple="false">
-		<v-list-item-content>
-			<v-list-item-title>{{ title }}</v-list-item-title>
-			<v-list-item-subtitle>{{ description }}</v-list-item-subtitle>
-		</v-list-item-content>
-
-		<v-list-item-action class="input-setting">
-			<v-text-field v-model="input_value" :loading="input_loading" @focusout="update" />
-		</v-list-item-action>
-	</v-list-item>
+	<div class="input-setting-item">
+		<div class="info">
+			<div class="title">{{ title }}</div>
+			<div class="description">{{ description }}</div>
+		</div>
+		<div class="value">
+			<a-input class="input-setting" v-model="input_value" :loading="input_loading" @focusout="update" />
+		</div>
+	</div>
 </template>
 
 <script>
@@ -91,7 +90,32 @@
 </script>
 
 <style lang="less">
-	.input-setting {
-		width: 25vw;
+
+	.input-setting-item {
+		display: flex;
+		align-items: center;
+		margin: 10px;
+		padding: 10px;
+		border-radius: 5px;
+		background: #f0f2f5;
+		border: 1px solid darkseagreen;
+
+		.info {
+			flex-grow: 1;
+			padding: 15px;
+
+			.title {
+				font-weight: bolder;
+				font-size: 1.3em;
+			}
+
+			.description {
+				opacity: .75;
+			}
+		}
+
+		.input-setting {
+			width: 250px;
+		}
 	}
 </style>
